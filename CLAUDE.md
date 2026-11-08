@@ -71,14 +71,18 @@ reports   id uuid pk, code text (e.g. TU-8842), category text, building text, fl
 alerts    id uuid pk, code text, type text check in ('confirmed','drill'), title text,
           building text, instruction text, assembly_point text, starts_at timestamptz,
           ends_at timestamptz, status text check in ('active','closed'),
-          confirmed_by text, confirmed_at timestamptz, created_at timestamptz default now()
+          confirmed_by text, confirmed_at timestamptz, created_at timestamptz default now(),
+          closed_stairs jsonb, fire_origin jsonb
 acks      alert_id uuid fk alerts, device_id text, created_at timestamptz default now(),
           primary key (alert_id, device_id)
+help_requests id uuid pk, alert_id uuid fk alerts, device_id text, name text, level int,
+          area text, created_at timestamptz default now(), handled_at timestamptz,
+          unique (alert_id, device_id)
 ```
 
 Storage bucket: `report-photos` (public read for the demo).
 
-No student login for the demo. Generate a random `device_id` on first open and keep it in `localStorage`, so each phone sees only its own reports.
+No student login for the demo. Generate a random `device_id` on first open and keep it in `localStorage`, so each phone sees only its own reports. Each phone can choose one optional username (`usernames` table, no password, not proof of identity); it is copied to `reports.reporter_name` for the admin list.
 
 Turn on Realtime for `reports`, `alerts` and `acks`.
 

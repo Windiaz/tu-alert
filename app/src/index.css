@@ -32,3 +32,55 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* 3D alert view. Without motion the same marks simply stay still. */
+@media (prefers-reduced-motion: no-preference) {
+  .fire-flicker {
+    animation: fire-flicker 0.7s ease-in-out infinite alternate;
+    transform-origin: 50% 100%;
+  }
+  .fire-floor {
+    animation: fire-floor 1s ease-in-out infinite alternate;
+  }
+  .route-flow {
+    animation: route-flow 0.9s linear infinite;
+  }
+  .stair-fall {
+    animation: stair-fall 2s linear infinite;
+  }
+}
+
+@keyframes fire-flicker {
+  from {
+    transform: scale(0.88);
+  }
+  to {
+    transform: scale(1.14);
+  }
+}
+
+@keyframes fire-floor {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.8;
+  }
+}
+
+@keyframes route-flow {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+@keyframes stair-fall {
+  from {
+    transform: translateZ(var(--from));
+    opacity: 1;
+  }
+  to {
+    transform: translateZ(0);
+    opacity: 0.25;
+  }
+}

@@ -3,7 +3,16 @@
 // Only same-origin GETs are handled, so Supabase requests are never cached.
 const CACHE = "tu-alert-v1";
 
-self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+  // Keep the site plan on the phone: an emergency is when the network is most likely to fail.
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((cache) => cache.add("/maps/engineering-site-plan.png"))
+      .catch(() => {}),
+  );
+});
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(

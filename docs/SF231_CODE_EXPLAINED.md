@@ -68,6 +68,7 @@ addFirst(element: T): void {
 **In TU Alert:**
 1. **The admin's report queue.** Reports are handled in the order students sent them, so nobody is skipped.
 2. **The offline outbox on the phone.** No internet when you press Submit? The report waits in the queue and is sent in the same order when you're back online.
+3. **The admin's "Needs help" list.** During an alert, whoever asked for help first is shown first. Each request is enqueued in the order it arrived, so the oldest stays at the front.
 
 ```ts
 enqueue(item: T): void { this.list.addLast(item); }     // O(1)
@@ -153,7 +154,7 @@ The list is already sorted, and new reports arrive one at a time. Insertion sort
 | Where in TU Alert | Structure | Main operation | Big-O |
 |---|---|---|---|
 | Alert history | SList | addFirst | O(1) |
-| Report queue, offline outbox | Queue | enqueue, dequeue | O(1) |
+| Report queue, offline outbox, Needs help list | Queue | enqueue, dequeue | O(1) |
 | Back button, Undo | Stack | push, pop | O(1) |
 | I'm safe count, find ticket | HashMap | put, get | O(1) average |
 | Admin report list | Merge sort | sort | O(n log n) |

@@ -1,15 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Building2, Camera, Clock, DoorOpen, Layers, Plus, Send, ShieldCheck, X, Zap } from "lucide-react";
+import { CategoryTile } from "../components/categoryIcon";
 import { AppHeader, Card } from "../components/layout";
 import type { NewReport } from "../lib/data";
 
 const CATEGORIES = [
-  { name: "Electrical", label: "Electrical", hint: "Power, outlets", emoji: "⚡" },
-  { name: "Air conditioning", label: "Air Conditioning", hint: "HVAC, cold/hot", emoji: "❄️" },
-  { name: "Plumbing", label: "Plumbing", hint: "Leaks, drainage", emoji: "💧" },
-  { name: "Safety hazard", label: "Safety Hazard", hint: "Urgent priority", emoji: "⚠️" },
-  { name: "Cleanliness", label: "Cleanliness", hint: "Spills, trash", emoji: "🧹" },
-  { name: "Other", label: "Other", hint: "General fixes", emoji: "📝" },
+  { name: "Electrical", label: "Electrical", hint: "Power, outlets" },
+  { name: "Air conditioning", label: "Air Conditioning", hint: "HVAC, cold/hot" },
+  { name: "Plumbing", label: "Plumbing", hint: "Leaks, drainage" },
+  { name: "Safety hazard", label: "Safety Hazard", hint: "Urgent priority" },
+  { name: "Cleanliness", label: "Cleanliness", hint: "Spills, trash" },
+  { name: "Other", label: "Other", hint: "General fixes" },
 ];
 
 const NOTE_MAX = 120;
@@ -117,7 +118,7 @@ export function ReportScreen({ onBack, onSubmit }: { onBack: () => void; onSubmi
                   }`}
                 >
                   {selected && <span className="absolute top-2 right-2 size-2 rounded-full bg-alert" />}
-                  <span className={`grid size-10 shrink-0 place-items-center rounded-lg text-xl ${selected ? "bg-red-100" : "bg-tint"}`}>{c.emoji}</span>
+                  <CategoryTile category={c.name} />
                   <span className="min-w-0">
                     <span className={`block font-semibold leading-tight ${selected ? "text-brand" : ""}`}>{c.label}</span>
                     <span className="mt-0.5 block text-xs text-muted">{c.hint}</span>

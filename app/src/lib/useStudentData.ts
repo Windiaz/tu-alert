@@ -3,10 +3,12 @@ import { Queue, SList } from "../ds";
 import {
   errorMessage,
   getDeviceId,
+  readUsername,
   isNetworkError,
   newCode,
   pendingToItem,
   sendAck,
+  sendHelp,
   sendReport,
   toReportItem,
   type AlertRow,
@@ -107,7 +109,7 @@ export function useStudentData() {
 
   const submitReport = useCallback(
     (report: NewReport) => {
-      outbox.current.enqueue({ ...report, id: crypto.randomUUID(), code: newCode("TU"), device_id: deviceId, createdAt: Date.now() });
+      outbox.current.enqueue({ ...report, id: crypto.randomUUID(), code: newCode("TU"), device_id: deviceId, reporter_name: readUsername(), createdAt: Date.now() });
       setPending(outbox.current.toArray());
       void flush();
     },
@@ -115,6 +117,7 @@ export function useStudentData() {
   );
 
   const acknowledge = useCallback((alertId: string) => sendAck(alertId, deviceId), [deviceId]);
+  const askHelp = useCallback((alertId: string, level: number | null, area: string | null) => sendHelp(alertId, deviceId, readUsername(), level, area), [deviceId]);
 
   const saved = rows.map(toReportItem);
   const waiting = pending.filter((p) => !rows.some((r) => r.id === p.id)).map(pendingToItem);
@@ -127,5 +130,6 @@ export function useStudentData() {
     clearSendError: () => setSendError(null),
     submitReport,
     acknowledge,
+    askHelp,
   };
 }

@@ -1,5 +1,6 @@
 // Types and Supabase calls shared by the student app and the admin dashboard.
 import type { Report } from "../ds";
+import type { ClosedStair, FireOrigin } from "./buildingLayout";
 import { supabase } from "./supabase";
 
 export type Status = Report["status"];
@@ -15,6 +16,7 @@ export type ReportRow = {
   photo_url: string | null;
   status: Status;
   device_id: string;
+  reporter_name?: string | null;
   created_at: string;
 };
 
@@ -32,9 +34,13 @@ export type AlertRow = {
   confirmed_by: string | null;
   confirmed_at: string | null;
   created_at: string;
+  closed_stairs?: ClosedStair[];
+  fire_origin?: FireOrigin | null;
 };
 
 export type AckRow = { alert_id: string; device_id: string };
+
+export type HelpRow = { id: string; alert_id: string; device_id: string; name: string | null; level: number | null; area: string | null; created_at: string; handled_at: string | null };
 
 export type ReportItem = Report & {
   id: string;
@@ -42,12 +48,13 @@ export type ReportItem = Report & {
   location: string;
   note: string | null;
   photoUrl: string | null;
+  reporter: string | null;
   pending?: boolean; // still waiting in the offline outbox
 };
 
 export type NewReport = { category: string; building: string; floor: string; room: string; note: string; photo: File | null };
 
-export type PendingReport = NewReport & { id: string; code: string; device_id: string; createdAt: number };
+export type PendingReport = NewReport & { id: string; code: string; device_id: string; reporter_name: string | null; createdAt: number };
 
 export const STATUS_LABEL: Record<Status, string> = {
   submitted: "Submitted",
@@ -82,6 +89,38 @@ export function getDeviceId(): string {
   return id;
 }
 
+// --- Audience mode: phones that joined from the class QR code get alerts only. ---
+
+const AUDIENCE_KEY = "tu_audience";
+
+/** Turns audience mode on when opened from the QR link, and removes the marker from the address. */
+export function joinAudienceFromLink(): boolean {
+  if (new URLSearchParams(window.location.search).get("join") === "1") {
+    writeStored(AUDIENCE_KEY, "1");
+    window.history.replaceState(null, "", window.location.pathname);
+  }
+  return readStored(AUDIENCE_KEY) === "1";
+}
+
+export const leaveAudience = () => writeStored(AUDIENCE_KEY, "0");
+
+// --- Username. Demo only: there is no password, so a name doesn't prove who someone is. ---
+
+export const USERNAME_RULE = /^[A-Za-z0-9_.ก-๙]{3,20}$/;
+
+export const readUsername = () => readStored("tu_username");
+
+/** Saves the name for this phone. Returns a message to show if it couldn't be saved. */
+export async function registerUsername(username: string, deviceId: string): Promise<string | null> {
+  const { error } = await supabase.from("usernames").insert({ device_id: deviceId, username });
+  if (error?.code === "23505") {
+    return error.message.includes("usernames_pkey") ? "This phone already has a username." : "That username is taken. Try another.";
+  }
+  if (error) return isNetworkError(error) ? "No connection. Check your internet and try again." : `Could not save: ${errorMessage(error)}`;
+  writeStored("tu_username", username);
+  return null;
+}
+
 // --- Formatting ---
 
 const joinLocation = (building: string, floor?: string | null, room?: string | null) =>
@@ -100,6 +139,7 @@ export function toReportItem(row: ReportRow): ReportItem {
     location: joinLocation(row.building, row.floor, row.room),
     note: row.note,
     photoUrl: row.photo_url,
+    reporter: row.reporter_name ?? null,
   };
 }
 
@@ -114,6 +154,7 @@ export function pendingToItem(p: PendingReport): ReportItem {
     location: joinLocation(p.building, p.floor, p.room),
     note: p.note || null,
     photoUrl: null,
+    reporter: p.reporter_name,
     pending: true,
   };
 }
@@ -196,6 +237,7 @@ export async function sendReport(report: PendingReport): Promise<void> {
       note: report.note || null,
       photo_url,
       device_id: report.device_id,
+      reporter_name: report.reporter_name,
     });
     if (!error) return;
     if (error.code !== "23505") throw error;
@@ -211,4 +253,13 @@ export async function sendReport(report: PendingReport): Promise<void> {
 export async function sendAck(alertId: string, deviceId: string): Promise<boolean> {
   const { error } = await supabase.from("acks").insert({ alert_id: alertId, device_id: deviceId });
   return !error || error.code === "23505";
+}
+
+// Returns true when saved. Asking again from the same phone reopens the request with the latest place.
+export async function sendHelp(alertId: string, deviceId: string, name: string | null, level: number | null, area: string | null): Promise<boolean> {
+  const { error } = await supabase.from("help_requests").insert({ alert_id: alertId, device_id: deviceId, name, level, area });
+  if (!error) return true;
+  if (error.code !== "23505") return false;
+  const { error: failed } = await supabase.from("help_requests").update({ level, area, handled_at: null }).eq("alert_id", alertId).eq("device_id", deviceId);
+  return !failed;
 }

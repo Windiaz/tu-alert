@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Building2, CalendarDays, CheckCheck, ChevronRight, CircleCheck, MapPin, Radio, ShieldCheck } from "lucide-react";
+import { Bell, Building2, CalendarDays, CheckCheck, ChevronRight, CircleCheck, ClipboardCheck, MapPin, Radio, ShieldCheck, Siren, type LucideIcon } from "lucide-react";
+import { AlertIcon } from "../components/alertIcon";
 import { AppHeader, Card } from "../components/layout";
 import { alertWhen, clockTime, type AlertRow } from "../lib/data";
 
@@ -8,10 +9,10 @@ type Filter = "all" | "confirmed" | "drill";
 export function AlertsScreen({ alerts, onOpen }: { alerts: AlertRow[]; onOpen: (alert: AlertRow) => void }) {
   const [filter, setFilter] = useState<Filter>("all");
   const count = (f: Filter) => (f === "all" ? alerts.length : alerts.filter((a) => a.type === f).length);
-  const tabs: [Filter, string][] = [
-    ["all", "All"],
-    ["confirmed", "Confirmed"],
-    ["drill", "Drills"],
+  const tabs: [Filter, string, LucideIcon, string][] = [
+    ["all", "All", Bell, "fill-amber-300 text-amber-700"],
+    ["confirmed", "Confirmed", Siren, "fill-red-200 text-red-600"],
+    ["drill", "Drills", ClipboardCheck, "fill-teal-200 text-teal-700"],
   ];
 
   return (
@@ -27,7 +28,7 @@ export function AlertsScreen({ alerts, onOpen }: { alerts: AlertRow[]; onOpen: (
       <main className="flex-1 space-y-4 overflow-y-auto p-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Campus Alerts History</h2>
-          <p className="mt-1 text-muted">Official broadcast log for Rangsit Campus</p>
+          <p className="mt-1 text-muted">Official broadcast log for Thammasat Rangsit University</p>
         </div>
 
         <div className="flex gap-3 rounded-2xl border border-line bg-tint p-4">
@@ -41,14 +42,15 @@ export function AlertsScreen({ alerts, onOpen }: { alerts: AlertRow[]; onOpen: (
         </div>
 
         <div className="grid grid-cols-3 gap-1 rounded-xl bg-tint p-1">
-          {tabs.map(([f, label]) => (
+          {tabs.map(([f, label, Icon, color]) => (
             <button
               key={f}
               type="button"
               onClick={() => setFilter(f)}
               aria-pressed={filter === f}
-              className={`rounded-lg py-2 text-sm font-semibold ${filter === f ? "bg-white shadow-sm" : "text-muted"}`}
+              className={`flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-sm font-semibold ${filter === f ? "bg-white shadow-sm" : "text-muted"}`}
             >
+              <Icon className={`size-5 ${color}`} aria-hidden="true" />
               {label} ({count(f)})
             </button>
           ))}
@@ -77,10 +79,15 @@ function ConfirmedCard({ alert: a, onOpen }: { alert: AlertRow; onOpen: () => vo
         </span>
         <span className="text-sm text-muted">{alertWhen(a)}</span>
       </div>
-      <h3 className="mt-2 text-lg font-semibold leading-snug">{a.title}</h3>
-      <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
-        <MapPin className="size-4 shrink-0 text-alert" aria-hidden="true" /> {a.building}
-      </p>
+      <div className="mt-2 flex items-start gap-3">
+        <AlertIcon title={a.title} type={a.type} />
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold leading-snug">{a.title}</h3>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+            <MapPin className="size-4 shrink-0 text-alert" aria-hidden="true" /> {a.building}
+          </p>
+        </div>
+      </div>
       <div className="mt-2.5 rounded-lg bg-tint p-2.5 text-sm">
         {a.instruction && <p className="leading-snug">{a.instruction}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-muted">
@@ -123,9 +130,14 @@ function DrillCard({ alert: a, onOpen }: { alert: AlertRow; onOpen: () => void }
           </span>
         )}
       </span>
-      <span className="mt-2 block text-lg font-semibold leading-snug">{a.title}</span>
-      <span className="mt-1 flex items-center gap-1.5 text-sm text-muted">
-        <Building2 className="size-4 shrink-0" aria-hidden="true" /> {a.building}
+      <span className="mt-2 flex items-start gap-3">
+        <AlertIcon title={a.title} type={a.type} />
+        <span className="min-w-0">
+          <span className="block text-lg font-semibold leading-snug">{a.title}</span>
+          <span className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+            <Building2 className="size-4 shrink-0" aria-hidden="true" /> {a.building}
+          </span>
+        </span>
       </span>
       <span className="mt-2.5 flex items-center gap-1.5 border-t border-line pt-2 text-sm text-muted">
         <CalendarDays className="size-4 shrink-0" aria-hidden="true" /> {alertWhen(a)}

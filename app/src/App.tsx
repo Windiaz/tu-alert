@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BellRing, Share, Volume2, X } from "lucide-react";
-import { TabBar, type Screen, type TabId } from "./components/layout";
+import { GoHomeContext, TabBar, type Screen, type TabId } from "./components/layout";
 import { Stack } from "./ds";
-import { errorMessage, readStored, writeStored, type AlertRow, type NewReport } from "./lib/data";
+import { errorMessage, joinAudienceFromLink, leaveAudience, readStored, readUsername, writeStored, type AlertRow, type NewReport } from "./lib/data";
 import { enablePush, getPushState, type PushState } from "./lib/push";
 import { audioReady, playChime, playSiren, unlockAudio } from "./lib/sound";
 import { useStudentData } from "./lib/useStudentData";
@@ -10,7 +10,9 @@ import { AlertsScreen } from "./screens/AlertsScreen";
 import { DrillScreen } from "./screens/DrillScreen";
 import { EmergencyScreen } from "./screens/EmergencyScreen";
 import { HomeScreen } from "./screens/HomeScreen";
+import { MapScreen } from "./screens/MapScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
+import { RegisterScreen } from "./screens/RegisterScreen";
 import { ReportScreen } from "./screens/ReportScreen";
 
 const SEEN_KEY = "tu_seen_alerts";
@@ -25,7 +27,7 @@ function readSeen(): string[] {
 }
 
 export default function App() {
-  const { deviceId, reports, alerts, sendError, clearSendError, submitReport, acknowledge } = useStudentData();
+  const { deviceId, reports, alerts, sendError, clearSendError, submitReport, acknowledge, askHelp } = useStudentData();
   const [screen, setScreen] = useState<Screen>("home");
   const [viewing, setViewing] = useState<AlertRow | null>(null);
   const [seen, setSeen] = useState<string[]>(readSeen);
@@ -34,6 +36,9 @@ export default function App() {
   const [pushState, setPushState] = useState<PushState>("unsupported");
   const [pushError, setPushError] = useState<string | null>(null);
   const [hintClosed, setHintClosed] = useState(() => readStored("tu_push_hint_closed") === "1");
+  const [username, setUsername] = useState(readUsername);
+  const [audience, setAudience] = useState(joinAudienceFromLink);
+  const [signupOpen, setSignupOpen] = useState(() => !audience && !readUsername() && readStored("tu_signup_skipped") !== "1");
   // SF231: screen history is a Stack. Opening a screen pushes, Back pops (Last-In First-Out).
   const history = useRef(new Stack<Screen>());
 
@@ -117,13 +122,20 @@ export default function App() {
     return acknowledge(alertId);
   };
 
-  const activeTab: TabId = screen === "drill" || screen === "emergency" ? "alerts" : screen;
+  const activeTab: TabId = screen === "drill" || screen === "emergency" ? "alerts" : screen === "map" ? "home" : screen;
   const shell = "mx-auto flex h-dvh max-w-[480px] flex-col bg-page shadow-sm";
 
   if (takeover?.type === "confirmed") {
     return (
       <div className={shell}>
-        <EmergencyScreen key={takeover.id} alert={takeover} soundOff={!soundOn} onSafe={() => safeTapped(takeover.id)} onClose={() => markSeen(takeover.id)} />
+        <EmergencyScreen
+          key={takeover.id}
+          alert={takeover}
+          soundOff={!soundOn}
+          onSafe={() => safeTapped(takeover.id)}
+          onHelp={audience ? undefined : (level, area) => askHelp(takeover.id, level, area)}
+          onClose={() => markSeen(takeover.id)}
+        />
       </div>
     );
   }
@@ -135,13 +147,38 @@ export default function App() {
     );
   }
 
+  // After the alert checks above, so signing up can never hide an emergency.
+  if (signupOpen) {
+    return (
+      <div className={shell}>
+        <RegisterScreen
+          deviceId={deviceId}
+          onDone={(name) => {
+            setUsername(name);
+            setSignupOpen(false);
+          }}
+          onSkip={() => {
+            writeStored("tu_signup_skipped", "1");
+            setSignupOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   // The list refreshes while an alert is open, so show its latest status.
   const current = viewing && (alerts.find((a) => a.id === viewing.id) ?? viewing);
 
   return (
     <div className={shell}>
       {screen === "emergency" && current ? (
-        <EmergencyScreen key={current.id} alert={current} onSafe={() => acknowledge(current.id)} onClose={back} />
+        <EmergencyScreen
+          key={current.id}
+          alert={current}
+          onSafe={() => acknowledge(current.id)}
+          onHelp={audience ? undefined : (level, area) => askHelp(current.id, level, area)}
+          onClose={back}
+        />
       ) : (
         <>
           {pushState === "off" ? (
@@ -189,12 +226,26 @@ export default function App() {
               </button>
             </div>
           )}
-          {screen === "home" && <HomeScreen reports={reports} activeAlerts={alerts.filter((a) => a.status === "active").length} onReport={() => go("report")} />}
-          {screen === "report" && <ReportScreen onBack={back} onSubmit={addReport} />}
-          {screen === "alerts" && <AlertsScreen alerts={alerts} onOpen={openAlert} />}
+          <GoHomeContext.Provider value={() => go("home")}>
+            {screen === "home" && <HomeScreen audience={audience} username={username} reports={reports} activeAlerts={alerts.filter((a) => a.status === "active").length} onReport={() => go("report")} onMap={() => go("map")} />}
+            {screen === "map" && <MapScreen onBack={back} />}
+            {screen === "report" && <ReportScreen onBack={back} onSubmit={addReport} />}
+            {screen === "alerts" && <AlertsScreen alerts={alerts} onOpen={openAlert} />}
+          </GoHomeContext.Provider>
           {screen === "drill" && current && <DrillScreen key={current.id} alert={current} onDismiss={back} />}
-          {screen === "profile" && <ProfileScreen onBack={back} />}
-          <TabBar active={activeTab} onSelect={go} />
+          {screen === "profile" && (
+            <ProfileScreen
+              audience={audience}
+              onLeaveAudience={() => {
+                leaveAudience();
+                setAudience(false);
+              }}
+              username={username}
+              onRegister={() => setSignupOpen(true)}
+              onBack={back}
+            />
+          )}
+          <TabBar active={activeTab} onSelect={go} hideReport={audience} />
         </>
       )}
     </div>

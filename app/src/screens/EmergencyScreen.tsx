@@ -5,6 +5,8 @@ import {
   CircleCheck,
   ClipboardCheck,
   Flame,
+  Footprints,
+  HandHelping,
   Map as MapIcon,
   Navigation,
   PersonStanding,
@@ -13,15 +15,23 @@ import {
   TriangleAlert,
   Volume2,
 } from "lucide-react";
+import { BuildingModel, floorFromLocation, ROUTE_SECTION_ID } from "../components/BuildingModel";
+import { areasOnLevel, fireSpots, isModelBuilding, stairFromInstruction } from "../lib/buildingLayout";
 import { clockTime, type AlertRow } from "../lib/data";
 
-type Props = { alert: AlertRow; soundOff?: boolean; onSafe: () => Promise<boolean>; onClose: () => void };
+type Props = { alert: AlertRow; soundOff?: boolean; onSafe: () => Promise<boolean>; onHelp?: (level: number | null, area: string | null) => Promise<boolean>; onClose: () => void };
 
-export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Props) {
+export function EmergencyScreen({ alert, soundOff = false, onSafe, onHelp, onClose }: Props) {
   const [safe, setSafe] = useState(false);
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [help, setHelp] = useState<"idle" | "asking" | "sending" | "sent" | "failed">("idle");
+  const [place, setPlace] = useState<{ level: number | null; area: string }>(() => ({ level: floorFromLocation(alert.building) ?? alert.fire_origin?.level ?? null, area: "" }));
   const closed = alert.status === "closed";
+  const hasModel = isModelBuilding(alert.building);
+  const closedStairs = alert.closed_stairs ?? [];
+  const fire = alert.fire_origin ?? null;
+  const firePlace = fire && fireSpots(fire.level).find((spot) => spot.id === fire.spot)?.label;
 
   const tapSafe = async () => {
     setSending(true);
@@ -31,6 +41,20 @@ export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Pr
     setSafe(saved);
     setFailed(!saved);
   };
+
+  const sendHelp = async (level: number | null, area: string | null) => {
+    setHelp("sending");
+    setHelp((await onHelp?.(level, area)) ? "sent" : "failed");
+  };
+
+  // The route picker already knows the place. Otherwise ask first, but never insist.
+  const tapHelp = () => {
+    if (!hasModel) void sendHelp(null, null);
+    else if (place.area) void sendHelp(place.level, place.area);
+    else setHelp("asking");
+  };
+
+  const canAskHelp = Boolean(onHelp) && !closed && !safe && help !== "sent";
 
   return (
     <div className="flex h-full flex-col bg-alert">
@@ -72,6 +96,26 @@ export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Pr
           </p>
           <p className="mt-2 text-3xl leading-tight font-extrabold tracking-tight">{alert.instruction?.toUpperCase() || "FOLLOW STAFF INSTRUCTIONS"}</p>
           {alert.assembly_point && <p className="mt-2 border-t border-black/20 pt-2 font-semibold leading-snug">Assemble at {alert.assembly_point}.</p>}
+          {!closed && fire && firePlace && (
+            <p role="alert" className="mt-2 flex items-start gap-2 rounded-lg bg-[#8e0009] px-3 py-2 font-bold leading-snug text-white">
+              <Flame className="mt-0.5 size-5 shrink-0" aria-hidden="true" /> FIRE STARTED: level {fire.level}, {firePlace}.
+            </p>
+          )}
+          {!closed &&
+            closedStairs.map(({ stair, level }) => (
+              <p key={stair} role="alert" className="mt-2 rounded-lg bg-[#8e0009] px-3 py-2 font-bold leading-snug text-white">
+                {stair.toUpperCase()} STAIRS CLOSED from level {level} up. Do not use them.
+              </p>
+            ))}
+          {hasModel && (
+            <button
+              type="button"
+              onClick={() => document.getElementById(ROUTE_SECTION_ID)?.scrollIntoView()}
+              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-ink font-bold text-white"
+            >
+              <Footprints className="size-5" aria-hidden="true" /> Find my exit route
+            </button>
+          )}
         </section>
 
         <section className="relative overflow-hidden rounded-2xl bg-white p-4 pl-6 text-ink">
@@ -96,21 +140,8 @@ export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Pr
           </div>
         </section>
 
-        {/* The sample plan marks a fire origin, so it only appears for fire alerts. */}
-        {/fire/i.test(alert.title) && (
-          <section className="rounded-2xl bg-white p-4 text-ink">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 font-bold">
-                <MapIcon className="size-5 text-brand" aria-hidden="true" /> Evacuation Plan (Demo)
-              </h3>
-              <span className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                <CircleCheck className="size-3.5" aria-hidden="true" /> EXIT CLEAR
-              </span>
-            </div>
-            <FloorPlan />
-            <p className="mt-2 text-center text-sm text-muted">Sample floor plan. Follow floor emergency markers to the nearest exit.</p>
-          </section>
-        )}
+        {hasModel && <BuildingModel alertFloor={floorFromLocation(alert.building)} alertStair={stairFromInstruction(alert.instruction)} assembly={alert.assembly_point} closed={closedStairs} fire={fire} onPlaceChange={(level, area) => setPlace({ level, area })} />}
+        {/engineering|administration|อำนวยการ/i.test(alert.building ?? "") && <SitePlan />}
 
         <section className="rounded-2xl border border-white/20 bg-[#7c1212] p-4 text-sm text-white">
           <h3 className="flex items-center gap-2 font-bold">
@@ -125,6 +156,17 @@ export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Pr
 
       <div className="shrink-0 space-y-2.5 bg-[#150606] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
         {failed && <p role="alert" className="text-center text-sm font-semibold text-amber-300">Not sent. Check your connection and tap again.</p>}
+        {!closed && !safe && help === "sent" && (
+          <p role="status" className="rounded-xl bg-amber-400 p-3 text-sm font-bold leading-snug text-ink">
+            Help request sent to security. Follow staff. If you can, call security.
+          </p>
+        )}
+        {canAskHelp && help === "failed" && (
+          <p role="alert" className="text-center text-sm font-semibold text-amber-300">
+            Help request not sent. Call Campus Security now, or tap again.
+          </p>
+        )}
+        {canAskHelp && help === "asking" && <HelpPlace place={place} onChange={setPlace} onSend={() => void sendHelp(place.level, place.area || null)} onCancel={() => setHelp("idle")} />}
         {closed ? (
           <button type="button" onClick={onClose} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-white bg-slate-700 py-4 text-lg font-bold text-white">
             Close
@@ -134,9 +176,16 @@ export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Pr
             <CircleCheck className="size-6" aria-hidden="true" /> Marked safe. Close
           </button>
         ) : (
-          <button type="button" onClick={tapSafe} disabled={sending} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-white bg-green-600 py-4 text-xl font-extrabold text-white disabled:opacity-70">
-            <CircleCheck className="size-6" aria-hidden="true" /> {sending ? "Sending…" : "I'M SAFE (Acknowledge)"}
-          </button>
+          <div className={canAskHelp && help !== "asking" ? "grid grid-cols-2 gap-2.5" : undefined}>
+            <button type="button" onClick={tapSafe} disabled={sending} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-white bg-green-600 py-4 text-xl font-extrabold text-white disabled:opacity-70">
+              <CircleCheck className="size-6 shrink-0" aria-hidden="true" /> {sending ? "Sending…" : canAskHelp ? "I'M SAFE" : "I'M SAFE (Acknowledge)"}
+            </button>
+            {canAskHelp && help !== "asking" && (
+              <button type="button" onClick={tapHelp} disabled={help === "sending"} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-white bg-red-700 py-4 text-lg font-extrabold text-white disabled:opacity-70">
+                <HandHelping className="size-6 shrink-0" aria-hidden="true" /> {help === "sending" ? "Sending…" : "NEED HELP"}
+              </button>
+            )}
+          </div>
         )}
         <a href="tel:025644444" className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-brand bg-white py-3.5 font-bold text-brand">
           <Phone className="size-5" aria-hidden="true" /> Call Campus Security (02-564-4444)
@@ -146,27 +195,66 @@ export function EmergencyScreen({ alert, soundOff = false, onSafe, onClose }: Pr
   );
 }
 
-function FloorPlan() {
+type HelpPlaceProps = { place: { level: number | null; area: string }; onChange: (place: { level: number | null; area: string }) => void; onSend: () => void; onCancel: () => void };
+
+/** Asked once when the route picker hasn't been used. Both can stay "Not sure": help must never wait on a form. */
+function HelpPlace({ place, onChange, onSend, onCancel }: HelpPlaceProps) {
+  const select = "h-11 min-w-0 rounded-lg border border-line bg-white px-2 text-sm font-semibold text-ink";
   return (
-    <svg viewBox="0 0 340 180" role="img" aria-label="Demo floor plan with a route from your position to the East Stairwell" className="w-full rounded-xl bg-[#0f1a2c]">
-      <rect x="18" y="14" width="304" height="134" rx="6" fill="#26324a" stroke="#9aa6bd" strokeWidth="2" />
-      <rect x="28" y="24" width="84" height="56" fill="#7f1d1d" stroke="#ef4444" />
-      <text x="70" y="50" textAnchor="middle" fill="#fff" fontSize="10" fontWeight="700">FIRE ORIGIN</text>
-      <text x="70" y="63" textAnchor="middle" fill="#fecaca" fontSize="8">Lab 301-304</text>
-      <rect x="28" y="90" width="84" height="48" fill="#334155" stroke="#64748b" />
-      <text x="70" y="118" textAnchor="middle" fill="#cbd5e1" fontSize="9">Seminar 3A</text>
-      <rect x="128" y="24" width="56" height="36" fill="#334155" stroke="#94a3b8" />
-      <text x="156" y="39" textAnchor="middle" fill="#f87171" fontSize="8" fontWeight="700">ELEVATOR</text>
-      <text x="156" y="50" textAnchor="middle" fill="#f87171" fontSize="7">DO NOT USE</text>
-      <path d="M128 24 184 60M184 24 128 60" stroke="#ef4444" strokeWidth="2" />
-      <rect x="240" y="24" width="72" height="114" fill="#14532d" stroke="#22c55e" strokeWidth="2" />
-      <text x="276" y="72" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="700">EAST</text>
-      <text x="276" y="84" textAnchor="middle" fill="#fff" fontSize="8" fontWeight="700">STAIRWELL</text>
-      <text x="276" y="122" textAnchor="middle" fill="#bbf7d0" fontSize="8" fontWeight="700">SAFE EXIT</text>
-      <path d="M170 116H208V90H250" fill="none" stroke="#22c55e" strokeWidth="4" strokeDasharray="6 3" strokeLinecap="round" />
-      <circle cx="160" cy="116" r="9" fill="#2563eb" stroke="#fff" strokeWidth="3" />
-      <text x="160" y="140" textAnchor="middle" fill="#7dd3fc" fontSize="8" fontWeight="700">YOU ARE HERE</text>
-      <text x="26" y="170" fill="#e2e8f0" fontSize="9" fontFamily="monospace">FASTEST ROUTE: 38 METERS (DEMO)</text>
-    </svg>
+    <div className="rounded-xl bg-white p-3 text-ink">
+      <p className="font-bold">Where are you?</p>
+      <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+        <select aria-label="Your level" value={place.level ?? ""} onChange={(event) => onChange({ level: event.target.value ? Number(event.target.value) : null, area: "" })} className={select}>
+          <option value="">Level: not sure</option>
+          {[1, 2, 3, 4, 5, 6, 7].map((level) => (
+            <option key={level} value={level}>
+              Level {level}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Your area" value={place.area} disabled={place.level === null} onChange={(event) => onChange({ ...place, area: event.target.value })} className={`${select} disabled:opacity-50`}>
+          <option value="">Area: not sure</option>
+          {place.level !== null &&
+            areasOnLevel(place.level).map((area) => (
+              <option key={area.id} value={area.id}>
+                {area.label}
+              </option>
+            ))}
+        </select>
+      </div>
+      <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+        <button type="button" onClick={onCancel} className="min-h-11 rounded-lg border border-line px-4 font-semibold">
+          Cancel
+        </button>
+        <button type="button" onClick={onSend} className="min-h-11 rounded-lg bg-red-700 font-bold text-white">
+          Send help request
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const SITE_PLAN = "/maps/engineering-site-plan.png";
+
+const BUILDINGS = ["Administration Building", "Civil Engineering Lab", "Mechanical Engineering Lab", "Industrial Engineering Lab", "Laboratory and Research Building"];
+
+// The faculty's real site plan. It shows where buildings are, not exits or routes inside them.
+export function SitePlan() {
+  return (
+    <section className="rounded-2xl bg-white p-4 text-ink">
+      <h3 className="mb-2 flex items-center gap-2 font-bold">
+        <MapIcon className="size-5 text-brand" aria-hidden="true" /> Faculty of Engineering Site Plan
+      </h3>
+      <a href={SITE_PLAN} target="_blank" rel="noreferrer" aria-label="Open the site plan full size">
+        <img src={SITE_PLAN} alt="Site plan of the Faculty of Engineering buildings at Thammasat Rangsit, with buildings 1 to 5 in red" className="w-full rounded-xl border border-line" />
+      </a>
+      <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm">
+        {BUILDINGS.map((name) => (
+          <li key={name}>{name}</li>
+        ))}
+      </ol>
+      <p className="mt-2 text-sm font-semibold">Shows buildings only, not exits. Follow exit signs and staff.</p>
+      <p className="mt-1 text-xs text-muted">North is to the left. Tap to enlarge. Source: Faculty of Engineering Building and Vehicle Unit, 2013.</p>
+    </section>
   );
 }

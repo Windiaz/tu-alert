@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { BadgeCheck, Bell, CalendarDays, ClipboardCheck, Hammer, Info, Lock, RotateCcw, Siren } from "lucide-react";
+import { BadgeCheck, Bell, CalendarDays, ClipboardCheck, Hammer, Info, Lock, RotateCcw, Siren, UserRound } from "lucide-react";
 import { BackButton, Card } from "../components/layout";
 
 const STORAGE_KEY = "tu-alert-tier2";
@@ -14,7 +14,9 @@ function loadPrefs(): Prefs {
   }
 }
 
-export function ProfileScreen({ onBack }: { onBack: () => void }) {
+type ProfileProps = { audience: boolean; onLeaveAudience: () => void; username: string | null; onRegister: () => void; onBack: () => void };
+
+export function ProfileScreen({ audience, onLeaveAudience, username, onRegister, onBack }: ProfileProps) {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
 
   const update = (next: Prefs) => {
@@ -37,6 +39,29 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
       </header>
 
       <main className="flex-1 space-y-4 overflow-y-auto p-4">
+        <Card className="flex items-center gap-3 p-4">
+          <UserRound className="size-6 shrink-0 text-brand" aria-hidden="true" />
+          {audience ? (
+            <>
+              <p className="flex-1 font-semibold">Joined as audience: alerts only</p>
+              <button type="button" onClick={onLeaveAudience} className="min-h-11 rounded-xl border border-line px-4 font-bold">
+                Leave
+              </button>
+            </>
+          ) : username ? (
+            <p className="min-w-0 flex-1 truncate">
+              Username: <span className="font-bold">{username}</span>
+            </p>
+          ) : (
+            <>
+              <p className="flex-1 font-semibold">No username yet</p>
+              <button type="button" onClick={onRegister} className="min-h-11 rounded-xl bg-brand px-4 font-bold text-white">
+                Choose one
+              </button>
+            </>
+          )}
+        </Card>
+
         <Card className="p-4">
           <h2 className="flex items-center gap-2 text-lg font-bold">
             <BadgeCheck className="size-6 text-brand" aria-hidden="true" /> Two-Tier Safety System
